@@ -7,48 +7,50 @@ st.set_page_config(page_title="Lançamentos", page_icon="💰")
 
 st.title("💸 Novo Lançamento")
 
-# --- BUSCA CATEGORIAS DO BANCO ---
+# 1. Busca categorias para o seletor
 res_cat = fetch_data("categorias")
-if res_cat and res_cat.data:
-    df_cat = pd.DataFrame(res_cat.data)
-else:
-    df_cat = pd.DataFrame(columns=['nome', 'tipo'])
+df_cat = pd.DataFrame(res_cat.data) if res_cat and res_cat.data else pd.DataFrame(columns=['nome', 'tipo'])
 
 with st.form("form_financeiro", clear_on_submit=True):
     col1, col2 = st.columns(2)
     with col1:
-        # Formato de data brasileiro no seletor
         data_t = st.date_input("Data", value=date.today(), format="DD/MM/YYYY")
-        desc = st.text_input("Descrição")
+        desc = st.text_input("Descrição (Ex: Compras Mes)")
         valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
     with col2:
         tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
         
-        # Filtragem dinâmica de categorias
-        cat_disponiveis = df_cat[df_cat['tipo'] == tipo]['nome'].tolist()
-        if not cat_disponiveis:
-            cat_disponiveis = ["Outros"]
+        # Filtra categorias baseado no tipo selecionado
+        lista_cat = df_cat[df_cat['tipo'] == tipo]['nome'].tolist()
+        if not lista_cat:
+            st.info("⚠️ Nenhuma categoria deste tipo cadastrada. Usando 'Outros'.")
+            lista_cat = ["Outros"]
             
-        categoria = st.selectbox("Categoria", cat_disponiveis)
+        cat = st.selectbox("Categoria", lista_cat)
         metodo = st.selectbox("Método", ["Pix", "Cartão", "Dinheiro", "Boleto"])
 
-    if st.form_submit_button("Salvar no Banco"):
+    submit = st.form_submit_button("Confirmar Lançamento")
+
+    if submit:
         if desc and valor:
+            # Payload organizado
             payload = {
-                "data_transacao": str(data_t), 
-                "descricao": desc, 
+                "data_transacao": str(data_t),
+                "descricao": desc,
                 "valor": valor,
-                "tipo": tipo, 
-                "categoria": categoria, 
+                "tipo": tipo,
+                "categoria": cat,
                 "metodo_pagamento": metodo
             }
+            
             try:
-                # Tentativa de inserção com feedback imediato
+                # Tenta inserir
                 resultado = insert_data("transacoes", payload)
                 if resultado:
-                    st.success(f"Sucesso! {desc} salvo.")
+                    st.success(f"✅ Sucesso: {desc} registrado!")
                     st.balloons()
             except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
+                # Mostra o erro real do banco se falhar
+                st.error(f"❌ Erro ao salvar no banco: {e}")
         else:
-            st.warning("Preencha Descrição e Valor.")
+            st.warning("Preencha a Descrição e o Valor.")
