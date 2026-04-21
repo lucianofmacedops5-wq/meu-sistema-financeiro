@@ -7,28 +7,46 @@ st.set_page_config(page_title="Lançamentos", page_icon="💰")
 
 st.title("💸 Novo Lançamento")
 
-# Tenta carregar categorias
-try:
-    res_cat = fetch_data("categorias")
-    df_cat = pd.DataFrame(res_cat.data)
-except:
-    df_cat = pd.DataFrame(columns=['nome', 'tipo'])
+# Função para buscar categorias sem cache para garantir atualização real
+def carregar_categorias():
+    try:
+        res = fetch_data("categorias")
+        if res and res.data:
+            return pd.DataFrame(res.data)
+    except:
+        pass
+    return pd.DataFrame(columns=['nome', 'tipo'])
 
-with st.form("meu_form", clear_on_submit=True):
+# Carregamos as categorias aqui (fora do form)
+df_cat = carregar_categorias()
+
+# Criamos o formulário
+with st.form("form_lancamento", clear_on_submit=True):
     col1, col2 = st.columns(2)
+    
     with col1:
         data_t = st.date_input("Data", value=date.today(), format="DD/MM/YYYY")
         desc = st.text_input("Descrição")
         valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
+    
     with col2:
-        tipo = st.selectbox("Tipo", ["Despesa", "Receita"])
-        lista_cat = df_cat[df_cat['tipo'] == tipo]['nome'].tolist() if not df_cat.empty else []
-        cat = st.selectbox("Categoria", lista_cat if lista_cat else ["Outros"])
+        # Quando o usuário mudar aqui, o script vai rodar novamente ao clicar ou interagir
+        tipo = st.selectbox("Tipo", ["Despesa", "Receita"], key="tipo_sel")
+        
+        # Filtra as categorias baseada no tipo selecionado no selectbox acima
+        categorias_filtradas = df_cat[df_cat['tipo'] == tipo]['nome'].tolist()
+        
+        if not categorias_filtradas:
+            categorias_filtradas = ["Outros"]
+            
+        cat = st.selectbox("Categoria", categorias_filtradas)
         metodo = st.selectbox("Método", ["Pix", "Cartão", "Dinheiro", "Boleto"])
 
-    if st.form_submit_button("🚀 Gravar no Banco"):
+    enviar = st.form_submit_button("Salvar Registro")
+
+    if enviar:
         if desc and valor:
-            dados = {
+            payload = {
                 "data_transacao": str(data_t),
                 "descricao": desc,
                 "valor": valor,
@@ -37,13 +55,16 @@ with st.form("meu_form", clear_on_submit=True):
                 "metodo_pagamento": metodo
             }
             try:
-                # Tenta salvar
-                resultado = insert_data("transacoes", dados)
-                st.success(f"✅ Salvo com sucesso: {desc}")
+                insert_data("transacoes", payload)
+                st.success(f"Registrado com sucesso: {desc}")
                 st.balloons()
+                # O rerun limpa o cache visual e recarrega a página
+                st.rerun()
             except Exception as e:
-                # Se der erro, ele vai mostrar EXATAMENTE o que o Supabase respondeu
-                st.error("❌ O Banco de Dados recusou o registro.")
-                st.code(f"Erro técnico: {e}")
+                st.error(f"Erro ao salvar: {e}")
         else:
             st.warning("Preencha Descrição e Valor.")
+
+# Dica visual para o usuário
+if df_cat.empty:
+    st.info("💡 Vá em 'Configurações' para cadastrar suas categorias de Receita e Despesa.")
